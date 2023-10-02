@@ -9,6 +9,9 @@
 
 package jvn;
 
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.io.*;
 
@@ -17,7 +20,7 @@ import java.io.*;
 public class JvnServerImpl 	
               extends UnicastRemoteObject 
 							implements JvnLocalServer, JvnRemoteServer{ 
-	
+
   /**
 	 * 
 	 */
@@ -25,15 +28,21 @@ public class JvnServerImpl
 	// A JVN server is managed as a singleton 
 	private static JvnServerImpl js = null;
 
+	private final JvnRemoteServer stub;
+	private final Registry registry;
+	private final JvnRemoteCoord coord;
+
   /**
   * Default constructor
   * @throws JvnException
   **/
 	private JvnServerImpl() throws Exception {
 		super();
-		// to be completed
+		registry = LocateRegistry.getRegistry("localhost", 2001);
+		coord = (JvnRemoteCoord) registry.lookup("Coord");
+		stub = (JvnRemoteServer) UnicastRemoteObject.exportObject(this, 0);
 	}
-	
+
   /**
     * Static method allowing an application to get a reference to 
     * a JVN server instance
@@ -56,20 +65,23 @@ public class JvnServerImpl
 	**/
 	public  void jvnTerminate()
 	throws jvn.JvnException {
-    // to be completed 
-	} 
-	
+		try {
+	    	coord.jvnTerminate(stub);
+		} catch (Exception e) {
+			throw new JvnException(e.getMessage());
+		}
+	}
+
 	/**
 	* creation of a JVN object
 	* @param o : the JVN object state
 	* @throws JvnException
 	**/
 	public  JvnObject jvnCreateObject(Serializable o)
-	throws jvn.JvnException { 
-		// to be completed 
-		return null; 
+	throws jvn.JvnException {
+		return new JvnObjectImpl(o);
 	}
-	
+
 	/**
 	*  Associate a symbolic name with a JVN object
 	* @param jon : the JVN object name
@@ -78,9 +90,13 @@ public class JvnServerImpl
 	**/
 	public  void jvnRegisterObject(String jon, JvnObject jo)
 	throws jvn.JvnException {
-		// to be completed 
+		try {
+			coord.jvnRegisterObject(jon, jo, stub);
+		} catch (RemoteException e) {
+			throw new JvnException(e.getMessage());
+		}
 	}
-	
+
 	/**
 	* Provide the reference of a JVN object beeing given its symbolic name
 	* @param jon : the JVN object name
@@ -89,10 +105,13 @@ public class JvnServerImpl
 	**/
 	public  JvnObject jvnLookupObject(String jon)
 	throws jvn.JvnException {
-    // to be completed 
-		return null;
-	}	
-	
+		try {
+			return coord.jvnLookupObject(jon, stub);
+		} catch (RemoteException e) {
+			throw new JvnException(e.getMessage());
+		}
+	}
+
 	/**
 	* Get a Read lock on a JVN object 
 	* @param joi : the JVN object identification
@@ -101,10 +120,13 @@ public class JvnServerImpl
 	**/
    public Serializable jvnLockRead(int joi)
 	 throws JvnException {
-		// to be completed 
-		return null;
+	   try {
+		   return coord.jvnLockRead(joi, stub);
+	   } catch (RemoteException e) {
+		   throw new JvnException(e.getMessage());
+	   }
+	}
 
-	}	
 	/**
 	* Get a Write lock on a JVN object 
 	* @param joi : the JVN object identification
@@ -113,8 +135,11 @@ public class JvnServerImpl
 	**/
    public Serializable jvnLockWrite(int joi)
 	 throws JvnException {
-		// to be completed 
-		return null;
+	   try {
+		   return coord.jvnLockWrite(joi, stub);
+	   } catch (RemoteException e) {
+		   throw new JvnException(e.getMessage());
+	   }
 	}	
 
 	
@@ -127,7 +152,7 @@ public class JvnServerImpl
 	**/
   public void jvnInvalidateReader(int joi)
 	throws java.rmi.RemoteException,jvn.JvnException {
-		// to be completed 
+
 	};
 	    
 	/**
