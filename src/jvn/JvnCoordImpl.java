@@ -9,7 +9,9 @@
 
 package jvn;
 
+import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.HashMap;
 import java.io.Serializable;
 
 
@@ -17,11 +19,25 @@ public class JvnCoordImpl
               extends UnicastRemoteObject 
 							implements JvnRemoteCoord{
 	
-
+  private Integer objCount = 0;
+  private HashMap<String, JvnObject> symbolicName_object = new HashMap<>();
+  private HashMap<Integer, String> objectId_symbolicName = new HashMap<>();
+  private HashMap<Integer, JvnRemoteServer> LockW_objectId_remoteServer = new HashMap<>();
+  private HashMap<Integer, JvnRemoteServer> LockR_objectId_remoteServer = new HashMap<>();
   /**
 	 * 
 	 */
 	private static final long serialVersionUID = 1L;
+
+  public static void main(String args[]){
+		try{
+		JvnCoordImpl obj = new JvnCoordImpl();
+		LocateRegistry.createRegistry(2001);
+		java.rmi.Naming.bind("localhost:2001/javanaise", obj);
+		} catch(Exception e) {
+			e.printStackTrace();
+		}
+	}
 
 /**
   * Default constructor
@@ -38,8 +54,8 @@ public class JvnCoordImpl
   **/
   public int jvnGetObjectId()
   throws java.rmi.RemoteException,jvn.JvnException {
-    // to be completed 
-    return 0;
+    this.objCount++;
+    return this.objCount;
   }
   
   /**
@@ -52,7 +68,16 @@ public class JvnCoordImpl
   **/
   public void jvnRegisterObject(String jon, JvnObject jo, JvnRemoteServer js)
   throws java.rmi.RemoteException,jvn.JvnException{
-    // to be completed 
+    if(this.symbolicName_object.containsKey(jon)){
+      System.out.println("[DEBUG] Key " + jon + " already present in symbolicName_object map. Updating mapping.");
+      this.symbolicName_object.put(jon, jo);
+    } else {
+      this.objectId_symbolicName.put(jvnGetObjectId(), jon);
+      System.out.println("[DEBUG] Created mapping id-name: "+ this.objCount+ " - " + jon);
+      this.symbolicName_object.put(jon, jo);
+      System.out.println("[DEBUG] Created mapping name-object: " + jon); 
+    }
+    
   }
   
   /**
@@ -63,8 +88,7 @@ public class JvnCoordImpl
   **/
   public JvnObject jvnLookupObject(String jon, JvnRemoteServer js)
   throws java.rmi.RemoteException,jvn.JvnException{
-    // to be completed 
-    return null;
+    return this.symbolicName_object.containsKey(jon) ? this.symbolicName_object.get(jon) : null ;
   }
   
   /**
@@ -76,8 +100,9 @@ public class JvnCoordImpl
   **/
    public Serializable jvnLockRead(int joi, JvnRemoteServer js)
    throws java.rmi.RemoteException, JvnException{
-    // to be completed
-    return null;
+    this.LockR_objectId_remoteServer.put(joi, js);
+    System.out.println("[INFO] Server " + js + " acquires read lock for " + joi);
+    return this.symbolicName_object.get(this.objectId_symbolicName.get(joi));
    }
 
   /**
@@ -89,8 +114,9 @@ public class JvnCoordImpl
   **/
    public Serializable jvnLockWrite(int joi, JvnRemoteServer js)
    throws java.rmi.RemoteException, JvnException{
-    // to be completed
-    return null;
+    this.LockW_objectId_remoteServer.put(joi, js);
+    System.out.println("[INFO] Server " + js + " acquires write lock for " + joi);
+    return this.symbolicName_object.get(this.objectId_symbolicName.get(joi));
    }
 
 	/**
