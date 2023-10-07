@@ -13,15 +13,15 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.io.Serializable;
-
+//todo: Names -> id -> object !!!! currently incorrect
 
 public class JvnCoordImpl 	
               extends UnicastRemoteObject 
 							implements JvnRemoteCoord{
 	
   private Integer objCount = 0;
-  private HashMap<String, JvnObject> symbolicName_object = new HashMap<>();
-  private HashMap<Integer, String> objectId_symbolicName = new HashMap<>();
+  private HashMap<Integer, JvnObject> objectId_object = new HashMap<>();
+  private HashMap<String, Integer> symbolicName_objectId = new HashMap<>();
   private HashMap<Integer, JvnRemoteServer> LockW_objectId_remoteServer = new HashMap<>();
   private HashMap<Integer, JvnRemoteServer> LockR_objectId_remoteServer = new HashMap<>();
   /**
@@ -32,8 +32,8 @@ public class JvnCoordImpl
   public static void main(String args[]){
 		try{
 		JvnCoordImpl obj = new JvnCoordImpl();
-		LocateRegistry.createRegistry(2001);
-		java.rmi.Naming.bind("localhost:2001/javanaise", obj);
+		LocateRegistry.createRegistry(2002);
+		java.rmi.Naming.bind("javanaise", obj);
 		} catch(Exception e) {
 			e.printStackTrace();
 		}
@@ -68,16 +68,24 @@ public class JvnCoordImpl
   **/
   public void jvnRegisterObject(String jon, JvnObject jo, JvnRemoteServer js)
   throws java.rmi.RemoteException,jvn.JvnException{
-    if(this.symbolicName_object.containsKey(jon)){
-      System.out.println("[DEBUG] Key " + jon + " already present in symbolicName_object map. Updating mapping.");
-      this.symbolicName_object.put(jon, jo);
+    Integer id = 0;
+
+    if(this.objectId_object.values().contains(jo)){ 
+      for(Integer key: objectId_object.keySet()){
+        if(objectId_object.get(key) == jo){
+          id = key;
+        }
+      }
+      if(id == 0 || id == null){
+        throw new JvnException("objectId_object key-value pair error.");
+      }
+
     } else {
-      this.objectId_symbolicName.put(jvnGetObjectId(), jon);
-      System.out.println("[DEBUG] Created mapping id-name: "+ this.objCount+ " - " + jon);
-      this.symbolicName_object.put(jon, jo);
-      System.out.println("[DEBUG] Created mapping name-object: " + jon); 
+      id = this.jvnGetObjectId();
+      this.objectId_object.put(id, jo);
     }
-    
+
+    this.symbolicName_objectId.put(jon, id);
   }
   
   /**
@@ -88,7 +96,15 @@ public class JvnCoordImpl
   **/
   public JvnObject jvnLookupObject(String jon, JvnRemoteServer js)
   throws java.rmi.RemoteException,jvn.JvnException{
-    return this.symbolicName_object.containsKey(jon) ? this.symbolicName_object.get(jon) : null ;
+    Integer id = this.symbolicName_objectId.get(jon);
+    if(id == null){
+      throw new JvnException("No object with symbolic name " + jon);
+    }
+    JvnObject obj = this.objectId_object.get(id);
+    if(obj == null){
+      throw new JvnException("No object with id" + id);
+    }
+    return obj;
   }
   
   /**
@@ -101,8 +117,7 @@ public class JvnCoordImpl
    public Serializable jvnLockRead(int joi, JvnRemoteServer js)
    throws java.rmi.RemoteException, JvnException{
     this.LockR_objectId_remoteServer.put(joi, js);
-    System.out.println("[INFO] Server " + js + " acquires read lock for " + joi);
-    return this.symbolicName_object.get(this.objectId_symbolicName.get(joi));
+    return this.objectId_object.get(joi); //no checks for now
    }
 
   /**
@@ -115,8 +130,7 @@ public class JvnCoordImpl
    public Serializable jvnLockWrite(int joi, JvnRemoteServer js)
    throws java.rmi.RemoteException, JvnException{
     this.LockW_objectId_remoteServer.put(joi, js);
-    System.out.println("[INFO] Server " + js + " acquires write lock for " + joi);
-    return this.symbolicName_object.get(this.objectId_symbolicName.get(joi));
+    return this.objectId_object.get(joi); //no checks for now
    }
 
 	/**
@@ -126,7 +140,17 @@ public class JvnCoordImpl
 	**/
     public void jvnTerminate(JvnRemoteServer js)
 	 throws java.rmi.RemoteException, JvnException {
-	 // to be completed
+    for(Integer key: this.LockR_objectId_remoteServer.keySet()){
+      if(this.LockR_objectId_remoteServer.get(key) == js){
+        this.LockR_objectId_remoteServer.remove(key);
+      }
+    }
+
+    for(Integer key: this.LockW_objectId_remoteServer.keySet()){
+      if(this.LockW_objectId_remoteServer.get(key) == js){
+        this.LockW_objectId_remoteServer.remove(key);
+      }
+    }
     }
 }
 
