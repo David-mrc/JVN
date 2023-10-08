@@ -29,7 +29,7 @@ public class JvnCoordImpl
 	 */
 	private static final long serialVersionUID = 1L;
 
-  public static void main(String args[]){
+  public static void main(String args[]) throws Exception {
 		try{
 		JvnCoordImpl obj = new JvnCoordImpl();
 		LocateRegistry.createRegistry(2002);
@@ -44,7 +44,7 @@ public class JvnCoordImpl
   * @throws JvnException
   **/
 	private JvnCoordImpl() throws Exception {
-		// to be completed
+		System.out.println("Coordinator started");
 	}
 
   /**
