@@ -10,6 +10,7 @@
 package jvn;
 
 import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.io.Serializable;
@@ -32,8 +33,8 @@ public class JvnCoordImpl
   public static void main(String args[]) throws Exception {
 		try{
 		JvnCoordImpl obj = new JvnCoordImpl();
-		LocateRegistry.createRegistry(2002);
-		java.rmi.Naming.bind("javanaise", obj);
+		Registry r = LocateRegistry.createRegistry(2001);
+		r.bind("Coord", obj);
 		} catch(Exception e) {
 			e.printStackTrace();
 		}
@@ -98,7 +99,7 @@ public class JvnCoordImpl
   throws java.rmi.RemoteException,jvn.JvnException{
     Integer id = this.symbolicName_objectId.get(jon);
     if(id == null){
-      throw new JvnException("No object with symbolic name " + jon);
+      return null;
     }
     JvnObject obj = this.objectId_object.get(id);
     if(obj == null){
