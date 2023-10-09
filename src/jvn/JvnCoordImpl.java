@@ -127,7 +127,9 @@ public class JvnCoordImpl
             objectId_object.put(joi, writer.jvnInvalidateWriter(joi));
         }
         for (JvnRemoteServer reader: servers) {
+          if(!reader.equals(js)){
             reader.jvnInvalidateReader(joi);
+          }
         }
         servers.clear();
         writers.put(joi, js);
