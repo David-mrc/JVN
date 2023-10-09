@@ -28,7 +28,7 @@ public class Irc {
   **/
 	public static void main(String argv[]) {
 	   try {
-		   
+
 		// initialize JVN
 		JvnServerImpl js = JvnServerImpl.jvnGetServer();
 		
@@ -47,6 +47,7 @@ public class Irc {
 	   
 	   } catch (Exception e) {
 		   System.out.println("IRC problem : " + e.getMessage());
+		   e.printStackTrace();
 	   }
 	}
 
