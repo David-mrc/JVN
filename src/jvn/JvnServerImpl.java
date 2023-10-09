@@ -89,10 +89,7 @@ public class JvnServerImpl
 	 **/
 	public void jvnRegisterObject(String jon, JvnObject jo) throws jvn.JvnException {
 		try {
-			JvnLock lock = ((JvnObjectImpl) jo).lock;
-			((JvnObjectImpl) jo).lock = JvnLock.NL;
-			coord.jvnRegisterObject(jon, jo, this);
-			((JvnObjectImpl) jo).lock = lock;
+			coord.jvnRegisterObject(jon, new JvnObjectImpl(jo), this);
 		} catch (Exception e) {
 			throw new JvnException(e.getMessage());
 		}

@@ -5,7 +5,7 @@ import java.io.Serializable;
 public class JvnObjectImpl implements JvnObject {
     private final int joi;
     private Serializable object;
-    JvnLock lock;
+    private JvnLock lock;
 
     public JvnObjectImpl(int id, Serializable o) throws JvnException {
         joi = id;
@@ -13,11 +13,11 @@ public class JvnObjectImpl implements JvnObject {
         lock = JvnLock.W;
     }
 
-//    public JvnObjectImpl(JvnObject jo) throws JvnException {
-//        joi = jo.jvnGetObjectId();
-//        object = jo.jvnGetSharedObject();
-//        lock = JvnLock.NL;
-//    }
+    public JvnObjectImpl(JvnObject jo) throws JvnException {
+        joi = jo.jvnGetObjectId();
+        object = jo.jvnGetSharedObject();
+        lock = JvnLock.NL;
+    }
 
     @Override
     public synchronized void jvnLockRead() throws JvnException {
