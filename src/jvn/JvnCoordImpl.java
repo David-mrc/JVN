@@ -31,13 +31,9 @@ public class JvnCoordImpl
     private final HashMap<Integer, JvnRemoteServer> writers = new HashMap<>();
 
     public static void main(String[] args) throws Exception {
-		try{
-		    JvnRemoteCoord obj = new JvnCoordImpl();
-		    Registry r = LocateRegistry.createRegistry(2001);
-		    r.bind("Coord", obj);
-		} catch(Exception e) {
-			e.printStackTrace();
-		}
+        JvnRemoteCoord obj = new JvnCoordImpl();
+        Registry r = LocateRegistry.createRegistry(2001);
+        r.bind("Coord", obj);
 	}
 
     /**
@@ -98,13 +94,17 @@ public class JvnCoordImpl
      **/
     public Serializable jvnLockRead(int joi, JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
+        System.out.println("Trying to acquire read lock...");
+
         Set<JvnRemoteServer> servers = readers.get(joi);
         JvnRemoteServer writer = writers.get(joi);
 
         if (writer != null) {
+            System.out.println("Trying to invalidate writer for reader...");
             objectId_object.put(joi, writer.jvnInvalidateWriterForReader(joi));
             writers.remove(joi);
             servers.add(writer);
+            System.out.println("Writer invalidated for reader.");
         }
         servers.add(js);
         System.out.println("Read lock acquired by object with id: " + joi);
@@ -120,16 +120,22 @@ public class JvnCoordImpl
      **/
     public Serializable jvnLockWrite(int joi, JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
+        System.out.println("Trying to acquire write lock...");
+
         JvnRemoteServer writer = writers.get(joi);
         Set<JvnRemoteServer> servers = readers.get(joi);
 
         if (writer != null) {
+            System.out.println("Trying to invalidate writer...");
             objectId_object.put(joi, writer.jvnInvalidateWriter(joi));
+            System.out.println("Writer invalidated.");
         }
         for (JvnRemoteServer reader: servers) {
-          if(!reader.equals(js)){
-            reader.jvnInvalidateReader(joi);
-          }
+            if(!reader.equals(js)){
+                System.out.println("Trying to invalidate reader...");
+                reader.jvnInvalidateReader(joi);
+                System.out.println("Reader invalidated.");
+            }
         }
         servers.clear();
         writers.put(joi, js);
