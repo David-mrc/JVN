@@ -25,7 +25,7 @@ public class JvnServerImpl
 	private static JvnServerImpl js = null;
 
 	private final JvnRemoteCoord coord;
-	private final HashMap<Integer, JvnObject> objects;
+	private final HashMap<Integer, JvnObject> objects = new HashMap<>();
 
 	/**
 	 * Default constructor
@@ -35,7 +35,6 @@ public class JvnServerImpl
 		super();
 		Registry registry = LocateRegistry.getRegistry("localhost", 2001);
 		coord = (JvnRemoteCoord) registry.lookup("Coord");
-		objects = new HashMap<>();
 	}
 
 	/**
@@ -43,12 +42,12 @@ public class JvnServerImpl
 	 * a JVN server instance
 	 * @throws JvnException
 	 **/
-	public static JvnServerImpl jvnGetServer() {
+	public static JvnServerImpl jvnGetServer() throws JvnException {
 		if (js == null){
 			try {
 				js = new JvnServerImpl();
 			} catch (Exception e) {
-				return null;
+				throw new JvnException(e.getMessage());
 			}
 		}
 		return js;
@@ -74,7 +73,9 @@ public class JvnServerImpl
 	public JvnObject jvnCreateObject(Serializable o) throws jvn.JvnException {
 		try {
 			int joi = coord.jvnGetObjectId();
-			return null;
+			JvnObject jo = new JvnObjectImpl(joi, o);
+			objects.put(joi, jo);
+			return jo;
 		} catch (Exception e) {
 			throw new JvnException(e.getMessage());
 		}
@@ -88,7 +89,10 @@ public class JvnServerImpl
 	 **/
 	public void jvnRegisterObject(String jon, JvnObject jo) throws jvn.JvnException {
 		try {
+			JvnLock lock = ((JvnObjectImpl) jo).lock;
+			((JvnObjectImpl) jo).lock = JvnLock.NL;
 			coord.jvnRegisterObject(jon, jo, this);
+			((JvnObjectImpl) jo).lock = lock;
 		} catch (Exception e) {
 			throw new JvnException(e.getMessage());
 		}
@@ -102,7 +106,12 @@ public class JvnServerImpl
 	 **/
 	public JvnObject jvnLookupObject(String jon) throws jvn.JvnException {
 		try {
-			return coord.jvnLookupObject(jon, this);
+			JvnObject jo = coord.jvnLookupObject(jon, this);
+
+			if(jo != null) {
+				objects.put(jo.jvnGetObjectId(), jo);
+			}
+			return jo;
 		} catch (Exception e) {
 			throw new JvnException(e.getMessage());
 		}

@@ -2,7 +2,7 @@ package jvn;
 
 import java.io.Serializable;
 
-public enum JvnObjectState implements Serializable {
+public enum JvnLock implements Serializable {
     NL,  // no lock
     RC,  // read lock cached
     WC,  // write lock cached
