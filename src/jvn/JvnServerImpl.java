@@ -47,7 +47,7 @@ public class JvnServerImpl
 			try {
 				js = new JvnServerImpl();
 			} catch (Exception e) {
-				throw new JvnException(e.getMessage());
+				throw new JvnException(e.toString());
 			}
 		}
 		return js;
@@ -61,7 +61,7 @@ public class JvnServerImpl
 		try {
 			coord.jvnTerminate(this);
 		} catch (Exception e) {
-			throw new JvnException(e.getMessage());
+			throw new JvnException(e.toString());
 		}
 	}
 
@@ -77,7 +77,7 @@ public class JvnServerImpl
 			objects.put(joi, jo);
 			return jo;
 		} catch (Exception e) {
-			throw new JvnException(e.getMessage());
+			throw new JvnException(e.toString());
 		}
 	}
 
@@ -91,7 +91,7 @@ public class JvnServerImpl
 		try {
 			coord.jvnRegisterObject(jon, new JvnObjectImpl(jo), this);
 		} catch (Exception e) {
-			throw new JvnException(e.getMessage());
+			throw new JvnException(e.toString());
 		}
 	}
 
@@ -110,7 +110,7 @@ public class JvnServerImpl
 			}
 			return jo;
 		} catch (Exception e) {
-			throw new JvnException(e.getMessage());
+			throw new JvnException(e.toString());
 		}
 	}
 
@@ -124,7 +124,7 @@ public class JvnServerImpl
 		try {
 			return coord.jvnLockRead(joi, this);
 		} catch (Exception e) {
-			throw new JvnException(e.getMessage());
+			throw new JvnException(e.toString());
 		}
 	}
 
@@ -138,7 +138,7 @@ public class JvnServerImpl
 		try {
 			return coord.jvnLockWrite(joi, this);
 		} catch (Exception e) {
-			throw new JvnException(e.getMessage());
+			throw new JvnException(e.toString());
 		}
 	}
 
