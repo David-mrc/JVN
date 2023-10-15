@@ -1,83 +1,79 @@
 package irc;
 
-import java.io.Serializable;
-import java.util.Random;
-
 import jvn.JvnObject;
 import jvn.JvnServerImpl;
 
+import java.util.Random;
+
 public class Stress {
-	JvnObject       sentence;
-    public static void main(String argv[]) {
-	   try {
+    private static final long N_TEST = 1_000_000;
 
-		// initialize JVN
-		JvnServerImpl js = JvnServerImpl.jvnGetServer();
-		
-		// look up the Stress object in the JVN server
-		// if not found, create it, and register it in the JVN server
-		JvnObject jo = js.jvnLookupObject("Stress");
-		   
-		if (jo == null) {
-			jo = js.jvnCreateObject((Serializable) new Sentence());
-			// after creation, I have a write lock on the object
-			jo.jvnUnLock();
-			js.jvnRegisterObject("Stress", jo);
-		}
-		
-		 new Stress(jo);
-	   
-	   } catch (Exception e) {
-		   System.out.println("Stress problem : " + e.getMessage());
-		   e.printStackTrace();
-	   }
+    public static void main(String[] args) {
+        JvnServerImpl js = null;
+        try {
+            js = JvnServerImpl.jvnGetServer();
+            JvnObject jo = js.jvnLookupObject("Stress");
 
-	}
+            if (jo == null) {
+                jo = js.jvnCreateObject(new Sentence());
+                jo.jvnUnLock();
+                js.jvnRegisterObject("Stress", jo);
+            }
+            Random rand = new Random();
+            System.out.println("Entering stress test...");
 
-    /**
-   * Stress Constructor
-   @param jo the JVN object representing the Chat
-   **/
-	public Stress(JvnObject jo) throws Exception {
-        this.sentence = jo;
+            long value = 0;
 
-        long N_TEST = 100_000_000;
-        Random rand = new Random();
+            while (value < N_TEST) {
+                boolean op = rand.nextBoolean();
+                long newValue;
 
-        System.out.println("Entering stress test");
-        for(int i = 0; i< N_TEST ; i++){
-            int op = rand.nextInt(2);
-            performRandomOperation(this.sentence, this, op);
-        }
-        System.out.println("End of stress test");
-    }
+                if (op) {
+                    newValue = read(jo);
+                    value = newValue;
+                } else {
+                    newValue = write(jo);
+                }
 
-    private void performRandomOperation(JvnObject obj, Stress stress, int op) throws Exception {
-        if(op<1){
-            System.out.println("performing write");
-            write();
-        } else {
-            System.out.println("performing read");
-            read();
+                if (newValue < value) {
+                    System.err.println("Invalid new value read.");
+                    System.exit(1);
+                }
+                value = newValue;
+            }
+            js.jvnTerminate();
+
+            System.out.println("End of stress test.");
+            System.exit(0);
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
+            System.exit(1);
         }
     }
 
-    private void read() throws Exception {
-        this.sentence.jvnLockRead();
+    private static long read(JvnObject jo) throws Exception {
+        jo.jvnLockRead();
 
-		((Sentence)(this.sentence.jvnGetSharedObject())).read();
+		String s = ((Sentence)(jo.jvnGetSharedObject())).read();
+        long value = s.isEmpty() ? 0 : Long.parseLong(s);
+        System.out.println("Read: " + s);
 
-		this.sentence.jvnUnLock();
+		jo.jvnUnLock();
+        return value;
     }
 
-    private void write () throws Exception {
-        this.sentence.jvnLockWrite();
-		
-		((Sentence)(this.sentence.jvnGetSharedObject())).write("abcdefghijkm");
-	
-		this.sentence.jvnUnLock();
+    private static long write(JvnObject jo) throws Exception {
+        jo.jvnLockWrite();
+
+		String s = ((Sentence) jo.jvnGetSharedObject()).read();
+
+        long newValue = s.isEmpty() ? 1 : Long.parseLong(s) + 1;
+        String newStr = String.valueOf(newValue);
+
+        ((Sentence) jo.jvnGetSharedObject()).write(newStr);
+        System.out.println("Write: " + newStr);
+
+		jo.jvnUnLock();
+        return newValue;
     }
-
-    
-
 }
