@@ -5,72 +5,72 @@ import java.io.Serializable;
 public class JvnObjectImpl implements JvnObject {
     private final int joi;
     private Serializable object;
-    private JvnLock lock;
+    private JvnLock jvnLock;
 
     public JvnObjectImpl(int id, Serializable o) throws JvnException {
         joi = id;
         object = o;
-        lock = JvnLock.W;
+        jvnLock = JvnLock.W;
     }
 
     public JvnObjectImpl(JvnObject jo) throws JvnException {
         joi = jo.jvnGetObjectId();
         object = jo.jvnGetSharedObject();
-        lock = JvnLock.NL;
+        jvnLock = JvnLock.NL;
     }
 
     @Override
     public synchronized void jvnLockRead() throws JvnException {
-        switch (lock) {
+        switch (jvnLock) {
             case NL -> {
                 object = JvnServerImpl.jvnGetServer().jvnLockRead(joi);
-                lock = JvnLock.R;
+                jvnLock = JvnLock.R;
             }
-            case RC -> lock = JvnLock.R;
-            case WC -> lock = JvnLock.RWC;
+            case RC -> jvnLock = JvnLock.R;
+            case WC -> jvnLock = JvnLock.RWC;
             case R, W, RWC -> throw new JvnException("Lock already being used.");
         }
     }
 
     @Override
     public synchronized void jvnLockWrite() throws JvnException {
-        switch (lock) {
+        switch (jvnLock) {
             case NL, RC -> {
                 object = JvnServerImpl.jvnGetServer().jvnLockWrite(joi);
-                lock = JvnLock.W;
+                jvnLock = JvnLock.W;
             }
-            case WC -> lock = JvnLock.W;
+            case WC -> jvnLock = JvnLock.W;
             case R, W, RWC -> throw new JvnException("Lock already being used.");
         }
     }
 
     @Override
     public synchronized void jvnUnLock() throws JvnException {
-        switch (lock) {
-            case R -> lock = JvnLock.RC;
-            case W, RWC -> lock = JvnLock.WC;
+        switch (jvnLock) {
+            case R -> jvnLock = JvnLock.RC;
+            case W, RWC -> jvnLock = JvnLock.WC;
             case NL, RC, WC -> throw new JvnException("Lock not currently being used.");
         }
         notify();
     }
 
     @Override
-    public int jvnGetObjectId() throws JvnException {
+    public synchronized int jvnGetObjectId() throws JvnException {
         return joi;
     }
 
     @Override
-    public Serializable jvnGetSharedObject() throws JvnException {
+    public synchronized Serializable jvnGetSharedObject() throws JvnException {
         return object;
     }
 
     @Override
     public synchronized void jvnInvalidateReader() throws JvnException {
-        switch (lock) {
-            case RC -> lock = JvnLock.NL;
+        switch (jvnLock) {
+            case RC -> jvnLock = JvnLock.NL;
             case R -> {
                 waitLock();
-                lock = JvnLock.NL;
+                jvnLock = JvnLock.NL;
             }
             default -> throw new JvnException("No read lock to invalidate.");
         }
@@ -78,13 +78,13 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public synchronized Serializable jvnInvalidateWriter() throws JvnException {
-        switch (lock) {
-            case WC -> lock = JvnLock.NL;
+        switch (jvnLock) {
+            case WC -> jvnLock = JvnLock.NL;
             case W -> {
                 waitLock();
-                lock = JvnLock.NL;
+                jvnLock = JvnLock.NL;
             }
-            case RWC -> lock = JvnLock.R;
+            case RWC -> jvnLock = JvnLock.R;
             default -> throw new JvnException("No write lock to invalidate.");
         }
         return object;
@@ -92,13 +92,13 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public synchronized Serializable jvnInvalidateWriterForReader() throws JvnException {
-        switch (lock) {
-            case WC -> lock = JvnLock.RC;
+        switch (jvnLock) {
+            case WC -> jvnLock = JvnLock.RC;
             case W -> {
                 waitLock();
-                lock = JvnLock.RC;
+                jvnLock = JvnLock.RC;
             }
-            case RWC -> lock = JvnLock.R;
+            case RWC -> jvnLock = JvnLock.R;
             default -> throw new JvnException("No write lock to invalidate.");
         }
         return object;
