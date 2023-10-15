@@ -9,14 +9,15 @@
 
 package jvn;
 
+import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.HashMap;
 import java.io.Serializable;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
-//todo: Names -> id -> object !!!! currently incorrect
 
 public class JvnCoordImpl 	
         extends UnicastRemoteObject
@@ -25,6 +26,8 @@ public class JvnCoordImpl
     private static final long serialVersionUID = 1L;
 
     private int objCount = 0;
+    private int serverCount = 0;
+    private final HashMap<JvnRemoteServer, Integer> servers = new HashMap<>();
     private final HashMap<Integer, Serializable> objectId_object = new HashMap<>();
     private final HashMap<String, JvnObject> symbolicName_jo = new HashMap<>();
     private final HashMap<Integer, Set<JvnRemoteServer>> readers = new HashMap<>();
@@ -41,7 +44,7 @@ public class JvnCoordImpl
      * @throws JvnException
      **/
 	private JvnCoordImpl() throws Exception {
-		System.out.println("Coordinator started");
+		System.out.println("Coordinator started.");
 	}
 
     /**
@@ -49,7 +52,7 @@ public class JvnCoordImpl
      *  newly created JVN object)
      * @throws java.rmi.RemoteException,JvnException
      **/
-    public int jvnGetObjectId()
+    public synchronized int jvnGetObjectId()
             throws java.rmi.RemoteException, jvn.JvnException {
         readers.put(++objCount, new HashSet<>());
 		System.out.println("New object id allocated: " + objCount);
@@ -60,17 +63,19 @@ public class JvnCoordImpl
      * Associate a symbolic name with a JVN object
      * @param jon : the JVN object name
      * @param jo  : the JVN object
-     * @param joi : the JVN object identification
      * @param js  : the remote reference of the JVNServer
      * @throws java.rmi.RemoteException,JvnException
      **/
-    public void jvnRegisterObject(String jon, JvnObject jo, JvnRemoteServer js)
-            throws java.rmi.RemoteException,jvn.JvnException {
+    public synchronized void jvnRegisterObject(String jon, JvnObject jo, JvnRemoteServer js)
+            throws java.rmi.RemoteException, jvn.JvnException {
+        addServer(js);
+
         int joi = jo.jvnGetObjectId();
         objectId_object.put(joi, jo.jvnGetSharedObject());
         symbolicName_jo.put(jon, jo);
         writers.put(joi, js);
-        System.out.println("Object " + joi + " registered with name: " + jon);
+
+        print(js, "Object " + joi + " registered with name: \"" + jon + "\"");
     }
 
     /**
@@ -79,9 +84,10 @@ public class JvnCoordImpl
      * @param js : the remote reference of the JVNServer
      * @throws java.rmi.RemoteException,JvnException
      **/
-    public JvnObject jvnLookupObject(String jon, JvnRemoteServer js)
+    public synchronized JvnObject jvnLookupObject(String jon, JvnRemoteServer js)
             throws java.rmi.RemoteException,jvn.JvnException {
-        System.out.println("Looking up for object: " + jon);
+        addServer(js);
+        print(js, "Looking up for object: \"" + jon + "\"");
         return symbolicName_jo.get(jon);
     }
 
@@ -92,22 +98,12 @@ public class JvnCoordImpl
      * @return the current JVN object state
      * @throws java.rmi.RemoteException, JvnException
      **/
-    public Serializable jvnLockRead(int joi, JvnRemoteServer js)
+    public synchronized Serializable jvnLockRead(int joi, JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
-        System.out.println("Trying to acquire read lock...");
+        invalidateWriterForReader(joi, js);
+        readers.get(joi).add(js);
 
-        Set<JvnRemoteServer> servers = readers.get(joi);
-        JvnRemoteServer writer = writers.get(joi);
-
-        if (writer != null) {
-            System.out.println("Trying to invalidate writer for reader...");
-            objectId_object.put(joi, writer.jvnInvalidateWriterForReader(joi));
-            writers.remove(joi);
-            servers.add(writer);
-            System.out.println("Writer invalidated for reader.");
-        }
-        servers.add(js);
-        System.out.println("Read lock acquired by object with id: " + joi);
+        print(js, "Read lock acquired on object: " + joi);
         return objectId_object.get(joi);
     }
 
@@ -118,28 +114,13 @@ public class JvnCoordImpl
      * @return the current JVN object state
      * @throws java.rmi.RemoteException, JvnException
      **/
-    public Serializable jvnLockWrite(int joi, JvnRemoteServer js)
+    public synchronized Serializable jvnLockWrite(int joi, JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
-        System.out.println("Trying to acquire write lock...");
-
-        JvnRemoteServer writer = writers.get(joi);
-        Set<JvnRemoteServer> servers = readers.get(joi);
-
-        if (writer != null) {
-            System.out.println("Trying to invalidate writer...");
-            objectId_object.put(joi, writer.jvnInvalidateWriter(joi));
-            System.out.println("Writer invalidated.");
-        }
-        for (JvnRemoteServer reader: servers) {
-            if(!reader.equals(js)){
-                System.out.println("Trying to invalidate reader...");
-                reader.jvnInvalidateReader(joi);
-                System.out.println("Reader invalidated.");
-            }
-        }
-        servers.clear();
+        invalidateReaders(joi, js);
+        invalidateWriter(joi, js);
         writers.put(joi, js);
-        System.out.println("Write lock acquired by object with id: " + joi);
+
+        print(js, "Write lock acquired on object: " + joi);
         return objectId_object.get(joi);
     }
 
@@ -148,19 +129,71 @@ public class JvnCoordImpl
      * @param js  : the remote reference of the server
      * @throws java.rmi.RemoteException, JvnException
      **/
-    public void jvnTerminate(JvnRemoteServer js)
+    public synchronized void jvnTerminate(JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
-        for(Integer key: this.readers.keySet()){
-          if(this.readers.get(key).contains(js)){
-            this.readers.remove(key);
-          }
+        for (Integer key : this.readers.keySet()) {
+            if (this.readers.get(key).contains(js)) {
+                this.readers.remove(key);
+            }
         }
 
-        for(Integer key: this.writers.keySet()){
-          if(this.writers.get(key) == js){
-            this.writers.remove(key);
-          }
+        for (Integer key : this.writers.keySet()) {
+            if (this.writers.get(key) == js) {
+                this.writers.remove(key);
+            }
         }
-        System.out.println("Server terminated");
+        print(js, "Server terminated.");
+        servers.remove(js);
+    }
+
+
+    private void addServer(JvnRemoteServer js) {
+        servers.computeIfAbsent(js, k -> ++serverCount);
+    }
+
+    private void print(JvnRemoteServer js, String message) {
+        System.out.println("[" + servers.get(js) + "] " + message);
+    }
+
+    private void invalidateReaders(int joi, JvnRemoteServer js)
+            throws RemoteException, JvnException {
+        Iterator<JvnRemoteServer> it = readers.get(joi).iterator();
+
+        while (it.hasNext()) {
+            JvnRemoteServer reader = it.next();
+            print(js, "Invalidating reader: " + servers.get(reader));
+
+            if (!reader.equals(js)) {
+                reader.jvnInvalidateReader(joi);
+            }
+            it.remove();
+        }
+    }
+
+    private void invalidateWriter(int joi, JvnRemoteServer js)
+            throws RemoteException,JvnException {
+        JvnRemoteServer writer = writers.get(joi);
+
+        if (writer != null) {
+            print(js, "Invalidating writer: " + servers.get(writer));
+
+            Serializable obj = writer.jvnInvalidateWriter(joi);
+            objectId_object.put(joi, obj);
+            writers.remove(joi);
+        }
+    }
+
+    private void invalidateWriterForReader(int joi, JvnRemoteServer js)
+            throws RemoteException,JvnException {
+        JvnRemoteServer writer = writers.get(joi);
+
+        if (writer != null) {
+            print(js, "Invalidating writer for reader: " + servers.get(writer));
+
+            Serializable obj = writer.jvnInvalidateWriterForReader(joi);
+            objectId_object.put(joi, obj);
+            writers.remove(joi);
+            readers.get(joi).add(writer);
+        }
     }
 }
