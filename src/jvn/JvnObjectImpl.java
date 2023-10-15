@@ -6,6 +6,8 @@ public class JvnObjectImpl implements JvnObject {
     private final int joi;
     private Serializable object;
     private JvnLock jvnLock;
+    private boolean pendingLock = false;
+    private boolean pendingInvalidate = false;
 
     public JvnObjectImpl(int id, Serializable o) throws JvnException {
         joi = id;
@@ -23,8 +25,8 @@ public class JvnObjectImpl implements JvnObject {
     public synchronized void jvnLockRead() throws JvnException {
         switch (jvnLock) {
             case NL -> {
-                object = JvnServerImpl.jvnGetServer().jvnLockRead(joi);
                 jvnLock = JvnLock.R;
+                object = JvnServerImpl.jvnGetServer().jvnLockRead(joi);
             }
             case RC -> jvnLock = JvnLock.R;
             case WC -> jvnLock = JvnLock.RWC;
@@ -33,14 +35,28 @@ public class JvnObjectImpl implements JvnObject {
     }
 
     @Override
-    public synchronized void jvnLockWrite() throws JvnException {
-        switch (jvnLock) {
-            case NL, RC -> {
-                object = JvnServerImpl.jvnGetServer().jvnLockWrite(joi);
-                jvnLock = JvnLock.W;
+    public void jvnLockWrite() throws JvnException {
+        synchronized (this) {
+            switch (jvnLock) {
+                case NL -> {
+                    jvnLock = JvnLock.W;
+                    object = JvnServerImpl.jvnGetServer().jvnLockWrite(joi);
+                    return;
+                }
+                case WC -> {
+                    jvnLock = JvnLock.W;
+                    return;
+                }
+                case R, W, RWC -> throw new JvnException("Lock already being used.");
             }
-            case WC -> jvnLock = JvnLock.W;
-            case R, W, RWC -> throw new JvnException("Lock already being used.");
+            jvnLock = JvnLock.W;
+            pendingLock = true;
+        }
+        // case RC
+        object = JvnServerImpl.jvnGetServer().jvnLockWrite(joi);
+
+        synchronized (this) {
+            pendingLock = false;
         }
     }
 
@@ -52,6 +68,10 @@ public class JvnObjectImpl implements JvnObject {
             case NL, RC, WC -> throw new JvnException("Lock not currently being used.");
         }
         notify();
+
+        if (pendingInvalidate) {
+            waitLock();
+        }
     }
 
     @Override
@@ -69,10 +89,14 @@ public class JvnObjectImpl implements JvnObject {
         switch (jvnLock) {
             case RC -> jvnLock = JvnLock.NL;
             case R -> {
-                waitLock();
+                waitAndNotify();
                 jvnLock = JvnLock.NL;
             }
-            default -> throw new JvnException("No read lock to invalidate.");
+            default -> {
+                if (jvnLock != JvnLock.W || !pendingLock) {
+                    throw new JvnException("No read lock to invalidate.");
+                }
+            }
         }
     }
 
@@ -80,11 +104,10 @@ public class JvnObjectImpl implements JvnObject {
     public synchronized Serializable jvnInvalidateWriter() throws JvnException {
         switch (jvnLock) {
             case WC -> jvnLock = JvnLock.NL;
-            case W -> {
-                waitLock();
+            case W, RWC -> {
+                waitAndNotify();
                 jvnLock = JvnLock.NL;
             }
-            case RWC -> jvnLock = JvnLock.R;
             default -> throw new JvnException("No write lock to invalidate.");
         }
         return object;
@@ -95,7 +118,7 @@ public class JvnObjectImpl implements JvnObject {
         switch (jvnLock) {
             case WC -> jvnLock = JvnLock.RC;
             case W -> {
-                waitLock();
+                waitAndNotify();
                 jvnLock = JvnLock.RC;
             }
             case RWC -> jvnLock = JvnLock.R;
@@ -110,5 +133,12 @@ public class JvnObjectImpl implements JvnObject {
         } catch (Exception e) {
             throw new JvnException(e.getMessage());
         }
+    }
+
+    private void waitAndNotify() throws JvnException {
+        pendingInvalidate = true;
+        waitLock();
+        pendingInvalidate = false;
+        notify();
     }
 }
