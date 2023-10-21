@@ -8,13 +8,14 @@
 package jvn;
 
 import java.io.*;
+import java.lang.reflect.InvocationHandler;
 
 /**
  * Interface of a JVN object. 
  * A JVN object is used to acquire read/write locks to access a given shared object
  */
 
-public interface JvnObject extends Serializable {
+public interface JvnObject extends InvocationHandler, Serializable {
 	/* A JvnObject should be serializable in order to be able to transfer 
        a reference to a JVN object remotely */
 

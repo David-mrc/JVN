@@ -1,6 +1,8 @@
 package jvn;
 
 import java.io.Serializable;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 public class JvnObjectImpl implements JvnObject {
     private final int joi;
@@ -9,17 +11,52 @@ public class JvnObjectImpl implements JvnObject {
     private boolean pendingLock = false;
     private boolean pendingInvalidate = false;
 
-    public JvnObjectImpl(int id, Serializable o) throws JvnException {
+    private JvnObjectImpl(int id, Serializable o, LockState lock) throws JvnException {
         joi = id;
         object = o;
-        lockState = LockState.W;
+        lockState = lock;
     }
 
-    public JvnObjectImpl(JvnObject jo) throws JvnException {
-        joi = jo.jvnGetObjectId();
-        object = jo.jvnGetSharedObject();
-        lockState = LockState.NL;
+    public static Object newInstance(int id, Serializable o) throws JvnException {
+        return Proxy.newProxyInstance(
+                o.getClass().getClassLoader(),
+                o.getClass().getInterfaces(),
+                new JvnObjectImpl(id, o, LockState.WC));
     }
+
+    public static Object newInstance(JvnObject jo) throws JvnException {
+        int id = jo.jvnGetObjectId();
+        Serializable o = jo.jvnGetSharedObject();
+
+        return Proxy.newProxyInstance(
+                o.getClass().getClassLoader(),
+                o.getClass().getInterfaces(),
+                new JvnObjectImpl(id, o, LockState.NL));
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        try {
+            if (!method.isAnnotationPresent(JvnLock.class)) {
+                throw new RuntimeException("Cannot invoke method " + method.getName() +
+                        ": JvnLock annotation is missing");
+            }
+            JvnLockType type = method.getAnnotation(JvnLock.class).value();
+
+            if (type == JvnLockType.READ) {
+                jvnLockRead();
+            } else {
+                jvnLockWrite();
+            }
+            Object result = method.invoke(object, args);
+            jvnUnLock();
+
+            return result;
+        } catch (Exception e) {
+            throw e.getCause();
+        }
+    }
+
 
     @Override
     public synchronized void jvnLockRead() throws JvnException {
