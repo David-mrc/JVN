@@ -131,15 +131,20 @@ public class JvnCoordImpl
      **/
     public synchronized void jvnTerminate(JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
-        for (Integer key : this.readers.keySet()) {
-            if (this.readers.get(key).contains(js)) {
-                this.readers.remove(key);
+        for (int joi : readers.keySet()) {
+            Set<JvnRemoteServer> set = readers.get(joi);
+
+            if (set.contains(js)) {
+                js.jvnInvalidateReader(joi);
+                set.remove(js);
             }
         }
 
-        for (Integer key : this.writers.keySet()) {
-            if (this.writers.get(key) == js) {
-                this.writers.remove(key);
+        for (int joi : writers.keySet()) {
+            if (writers.get(joi) == js) {
+                Serializable obj = js.jvnInvalidateWriter(joi);
+                objectId_object.put(joi, obj);
+                writers.remove(joi);
             }
         }
         print(js, "Server terminated.");
