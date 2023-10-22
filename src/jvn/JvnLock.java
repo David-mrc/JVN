@@ -1,12 +1,12 @@
 package jvn;
 
-import java.io.Serializable;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-public enum JvnLock implements Serializable {
-    NL,  // no lock
-    RC,  // read lock cached
-    WC,  // write lock cached
-    R,   // read lock taken
-    W,   // write lock taken
-    RWC, // write lock cached & read taken
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.METHOD)
+public @interface JvnLock {
+    JvnLockType value();
 }

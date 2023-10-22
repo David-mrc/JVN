@@ -25,16 +25,16 @@ public interface JvnLocalServer {
   * @return the JVN object 
 	* @throws JvnException
 	**/
-	public  JvnObject jvnCreateObject(Serializable jos)
+	public  Object jvnCreateObject(Serializable jos)
 	throws jvn.JvnException ; 
 	
 	/**
 	* Associate a symbolic name with a JVN object
 	* @param jon : the JVN object name
-	* @param jo : the JVN object 
+	* @param obj : the JVN object
 	* @throws JvnException
 	**/
-	public  void jvnRegisterObject(String jon, JvnObject jo)
+	public  void jvnRegisterObject(String jon, Object obj)
 	throws jvn.JvnException; 
 	
 	/**
@@ -43,7 +43,7 @@ public interface JvnLocalServer {
 	* @return the JVN object 
 	* @throws JvnException
 	**/
-	public  JvnObject jvnLookupObject(String jon)
+	public  Object jvnLookupObject(String jon)
 	throws jvn.JvnException ; 
 	
 	

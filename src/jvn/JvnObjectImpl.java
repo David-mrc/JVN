@@ -1,35 +1,68 @@
 package jvn;
 
 import java.io.Serializable;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 
 public class JvnObjectImpl implements JvnObject {
     private final int joi;
     private Serializable object;
-    private JvnLock jvnLock;
+    private LockState lockState;
     private boolean pendingLock = false;
     private boolean pendingInvalidate = false;
 
-    public JvnObjectImpl(int id, Serializable o) throws JvnException {
+    private JvnObjectImpl(int id, Serializable o, LockState lock) throws JvnException {
         joi = id;
         object = o;
-        jvnLock = JvnLock.W;
+        lockState = lock;
     }
 
-    public JvnObjectImpl(JvnObject jo) throws JvnException {
-        joi = jo.jvnGetObjectId();
-        object = jo.jvnGetSharedObject();
-        jvnLock = JvnLock.NL;
+    public static Object newInstance(int id, Serializable o) throws JvnException {
+        return Proxy.newProxyInstance(
+                o.getClass().getClassLoader(),
+                o.getClass().getInterfaces(),
+                new JvnObjectImpl(id, o, LockState.WC));
+    }
+
+    public static Object newInstance(JvnObject jo) throws JvnException {
+        int id = jo.jvnGetObjectId();
+        Serializable o = jo.jvnGetSharedObject();
+
+        return Proxy.newProxyInstance(
+                o.getClass().getClassLoader(),
+                o.getClass().getInterfaces(),
+                new JvnObjectImpl(id, o, LockState.NL));
     }
 
     @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        if (!method.isAnnotationPresent(JvnLock.class)) {
+            throw new RuntimeException("Cannot invoke method " + method.getName() +
+                    ": JvnLock annotation is missing");
+        }
+        JvnLockType type = method.getAnnotation(JvnLock.class).value();
+
+        if (type == JvnLockType.READ) {
+            jvnLockRead();
+        } else {
+            jvnLockWrite();
+        }
+        Object result = method.invoke(object, args);
+        jvnUnLock();
+
+        return result;
+    }
+
+
+    @Override
     public synchronized void jvnLockRead() throws JvnException {
-        switch (jvnLock) {
+        switch (lockState) {
             case NL -> {
-                jvnLock = JvnLock.R;
+                lockState = LockState.R;
                 object = JvnServerImpl.jvnGetServer().jvnLockRead(joi);
             }
-            case RC -> jvnLock = JvnLock.R;
-            case WC -> jvnLock = JvnLock.RWC;
+            case RC -> lockState = LockState.R;
+            case WC -> lockState = LockState.RWC;
             case R, W, RWC -> throw new JvnException("Lock already being used.");
         }
     }
@@ -37,19 +70,19 @@ public class JvnObjectImpl implements JvnObject {
     @Override
     public void jvnLockWrite() throws JvnException {
         synchronized (this) {
-            switch (jvnLock) {
+            switch (lockState) {
                 case NL -> {
-                    jvnLock = JvnLock.W;
+                    lockState = LockState.W;
                     object = JvnServerImpl.jvnGetServer().jvnLockWrite(joi);
                     return;
                 }
                 case WC -> {
-                    jvnLock = JvnLock.W;
+                    lockState = LockState.W;
                     return;
                 }
                 case R, W, RWC -> throw new JvnException("Lock already being used.");
             }
-            jvnLock = JvnLock.W;
+            lockState = LockState.W;
             pendingLock = true;
         }
         // case RC
@@ -62,9 +95,9 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public synchronized void jvnUnLock() throws JvnException {
-        switch (jvnLock) {
-            case R -> jvnLock = JvnLock.RC;
-            case W, RWC -> jvnLock = JvnLock.WC;
+        switch (lockState) {
+            case R -> lockState = LockState.RC;
+            case W, RWC -> lockState = LockState.WC;
             case NL, RC, WC -> throw new JvnException("Lock not currently being used.");
         }
         notify();
@@ -86,14 +119,14 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public synchronized void jvnInvalidateReader() throws JvnException {
-        switch (jvnLock) {
-            case RC -> jvnLock = JvnLock.NL;
+        switch (lockState) {
+            case RC -> lockState = LockState.NL;
             case R -> {
                 waitAndNotify();
-                jvnLock = JvnLock.NL;
+                lockState = LockState.NL;
             }
             default -> {
-                if (jvnLock != JvnLock.W || !pendingLock) {
+                if (lockState != LockState.W || !pendingLock) {
                     throw new JvnException("No read lock to invalidate.");
                 }
             }
@@ -102,11 +135,11 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public synchronized Serializable jvnInvalidateWriter() throws JvnException {
-        switch (jvnLock) {
-            case WC -> jvnLock = JvnLock.NL;
+        switch (lockState) {
+            case WC -> lockState = LockState.NL;
             case W, RWC -> {
                 waitAndNotify();
-                jvnLock = JvnLock.NL;
+                lockState = LockState.NL;
             }
             default -> throw new JvnException("No write lock to invalidate.");
         }
@@ -115,13 +148,13 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public synchronized Serializable jvnInvalidateWriterForReader() throws JvnException {
-        switch (jvnLock) {
-            case WC -> jvnLock = JvnLock.RC;
+        switch (lockState) {
+            case WC -> lockState = LockState.RC;
             case W -> {
                 waitAndNotify();
-                jvnLock = JvnLock.RC;
+                lockState = LockState.RC;
             }
-            case RWC -> jvnLock = JvnLock.R;
+            case RWC -> lockState = LockState.R;
             default -> throw new JvnException("No write lock to invalidate.");
         }
         return object;

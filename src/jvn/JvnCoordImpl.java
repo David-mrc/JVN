@@ -131,15 +131,20 @@ public class JvnCoordImpl
      **/
     public synchronized void jvnTerminate(JvnRemoteServer js)
             throws java.rmi.RemoteException, JvnException {
-        for (Integer key : this.readers.keySet()) {
-            if (this.readers.get(key).contains(js)) {
-                this.readers.remove(key);
+        for (int joi : readers.keySet()) {
+            Set<JvnRemoteServer> set = readers.get(joi);
+
+            if (set.contains(js)) {
+                js.jvnInvalidateReader(joi);
+                set.remove(js);
             }
         }
 
-        for (Integer key : this.writers.keySet()) {
-            if (this.writers.get(key) == js) {
-                this.writers.remove(key);
+        for (int joi : writers.keySet()) {
+            if (writers.get(joi) == js) {
+                Serializable obj = js.jvnInvalidateWriter(joi);
+                objectId_object.put(joi, obj);
+                writers.remove(joi);
             }
         }
         print(js, "Server terminated.");
@@ -162,11 +167,15 @@ public class JvnCoordImpl
         while (it.hasNext()) {
             JvnRemoteServer reader = it.next();
             print(js, "Invalidating reader: " + servers.get(reader));
+            it.remove();
 
             if (!reader.equals(js)) {
-                reader.jvnInvalidateReader(joi);
+                try {
+                    reader.jvnInvalidateReader(joi);
+                } catch (RemoteException e) {
+                    removeLostServers(reader);
+                }
             }
-            it.remove();
         }
     }
 
@@ -177,9 +186,13 @@ public class JvnCoordImpl
         if (writer != null) {
             print(js, "Invalidating writer: " + servers.get(writer));
 
-            Serializable obj = writer.jvnInvalidateWriter(joi);
-            objectId_object.put(joi, obj);
-            writers.remove(joi);
+            try {
+                Serializable obj = writer.jvnInvalidateWriter(joi);
+                objectId_object.put(joi, obj);
+                writers.remove(joi);
+            } catch (RemoteException e) {
+                removeLostServers(writer);
+            }
         }
     }
 
@@ -190,10 +203,28 @@ public class JvnCoordImpl
         if (writer != null) {
             print(js, "Invalidating writer for reader: " + servers.get(writer));
 
-            Serializable obj = writer.jvnInvalidateWriterForReader(joi);
-            objectId_object.put(joi, obj);
-            writers.remove(joi);
-            readers.get(joi).add(writer);
+            try {
+                Serializable obj = writer.jvnInvalidateWriterForReader(joi);
+                objectId_object.put(joi, obj);
+                writers.remove(joi);
+                readers.get(joi).add(writer);
+            } catch (RemoteException e) {
+                removeLostServers(writer);
+            }
         }
+    }
+
+    private void removeLostServers(JvnRemoteServer js) {
+        for (Set<JvnRemoteServer> set : readers.values()) {
+            set.remove(js);
+        }
+
+        for (int joi : writers.keySet()) {
+            if (writers.get(joi) == js) {
+                writers.remove(joi);
+            }
+        }
+        print(js, "Connection lost with server.");
+        servers.remove(js);
     }
 }

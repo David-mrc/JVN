@@ -1,15 +1,15 @@
-package irc;
+package test;
 
 import jvn.JvnLock;
 import jvn.JvnLockType;
 
 import java.io.Serializable;
 
-public interface Sentence extends Serializable {
+public interface Count extends Serializable {
 
     @JvnLock(JvnLockType.READ)
-	String read();
+	long read();
 
     @JvnLock(JvnLockType.WRITE)
-	void write(String text);
+	long increment();
 }

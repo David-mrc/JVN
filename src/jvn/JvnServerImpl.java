@@ -9,6 +9,7 @@
 
 package jvn;
 
+import java.lang.reflect.Proxy;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
@@ -70,12 +71,13 @@ public class JvnServerImpl
 	 * @param o : the JVN object state
 	 * @throws JvnException
 	 **/
-	public JvnObject jvnCreateObject(Serializable o) throws jvn.JvnException {
+	public Object jvnCreateObject(Serializable o) throws jvn.JvnException {
 		try {
 			int joi = coord.jvnGetObjectId();
-			JvnObject jo = new JvnObjectImpl(joi, o);
+			Object proxy = JvnObjectImpl.newInstance(joi, o);
+            JvnObject jo = (JvnObject) Proxy.getInvocationHandler(proxy);
 			objects.put(joi, jo);
-			return jo;
+			return proxy;
 		} catch (Exception e) {
 			throw new JvnException(e.toString());
 		}
@@ -84,12 +86,13 @@ public class JvnServerImpl
 	/**
 	 *  Associate a symbolic name with a JVN object
 	 * @param jon : the JVN object name
-	 * @param jo : the JVN object
+	 * @param obj : the JVN object
 	 * @throws JvnException
 	 **/
-	public void jvnRegisterObject(String jon, JvnObject jo) throws jvn.JvnException {
+	public void jvnRegisterObject(String jon, Object obj) throws jvn.JvnException {
 		try {
-			coord.jvnRegisterObject(jon, new JvnObjectImpl(jo), this);
+            JvnObject jo = (JvnObject) Proxy.getInvocationHandler(obj);
+			coord.jvnRegisterObject(jon, jo, this);
 		} catch (Exception e) {
 			throw new JvnException(e.toString());
 		}
@@ -101,14 +104,16 @@ public class JvnServerImpl
 	 * @return the JVN object
 	 * @throws JvnException
 	 **/
-	public JvnObject jvnLookupObject(String jon) throws jvn.JvnException {
+	public Object jvnLookupObject(String jon) throws jvn.JvnException {
 		try {
 			JvnObject jo = coord.jvnLookupObject(jon, this);
 
-			if(jo != null) {
-				objects.put(jo.jvnGetObjectId(), jo);
+			if (jo != null) {
+				Object proxy = JvnObjectImpl.newInstance(jo);
+				objects.put(jo.jvnGetObjectId(), (JvnObject) Proxy.getInvocationHandler(proxy));
+                return proxy;
 			}
-			return jo;
+			return null;
 		} catch (Exception e) {
 			throw new JvnException(e.toString());
 		}
