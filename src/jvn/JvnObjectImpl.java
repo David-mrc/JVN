@@ -36,25 +36,21 @@ public class JvnObjectImpl implements JvnObject {
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
-        try {
-            if (!method.isAnnotationPresent(JvnLock.class)) {
-                throw new RuntimeException("Cannot invoke method " + method.getName() +
-                        ": JvnLock annotation is missing");
-            }
-            JvnLockType type = method.getAnnotation(JvnLock.class).value();
-
-            if (type == JvnLockType.READ) {
-                jvnLockRead();
-            } else {
-                jvnLockWrite();
-            }
-            Object result = method.invoke(object, args);
-            jvnUnLock();
-
-            return result;
-        } catch (Exception e) {
-            throw e.getCause();
+        if (!method.isAnnotationPresent(JvnLock.class)) {
+            throw new RuntimeException("Cannot invoke method " + method.getName() +
+                    ": JvnLock annotation is missing");
         }
+        JvnLockType type = method.getAnnotation(JvnLock.class).value();
+
+        if (type == JvnLockType.READ) {
+            jvnLockRead();
+        } else {
+            jvnLockWrite();
+        }
+        Object result = method.invoke(object, args);
+        jvnUnLock();
+
+        return result;
     }
 
 
