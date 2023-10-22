@@ -10,6 +10,7 @@
 package jvn;
 
 import java.lang.reflect.Proxy;
+import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
@@ -61,8 +62,9 @@ public class JvnServerImpl
 	public void jvnTerminate() throws jvn.JvnException {
 		try {
 			coord.jvnTerminate(this);
-		} catch (Exception e) {
-			throw new JvnException(e.toString());
+		} catch (RemoteException e) {
+			System.out.println("Connection to coord lost.");
+			System.exit(1);
 		}
 	}
 
@@ -72,15 +74,18 @@ public class JvnServerImpl
 	 * @throws JvnException
 	 **/
 	public Object jvnCreateObject(Serializable o) throws jvn.JvnException {
+		Object proxy = null;
+
 		try {
 			int joi = coord.jvnGetObjectId();
-			Object proxy = JvnObjectImpl.newInstance(joi, o);
+			proxy = JvnObjectImpl.newInstance(joi, o);
             JvnObject jo = (JvnObject) Proxy.getInvocationHandler(proxy);
 			objects.put(joi, jo);
-			return proxy;
-		} catch (Exception e) {
-			throw new JvnException(e.toString());
+		} catch (RemoteException e) {
+			System.out.println("Connection to coord lost.");
+			System.exit(1);
 		}
+		return proxy;
 	}
 
 	/**
@@ -93,8 +98,9 @@ public class JvnServerImpl
 		try {
             JvnObject jo = (JvnObject) Proxy.getInvocationHandler(obj);
 			coord.jvnRegisterObject(jon, jo, this);
-		} catch (Exception e) {
-			throw new JvnException(e.toString());
+		} catch (RemoteException e) {
+			System.out.println("Connection to coord lost.");
+			System.exit(1);
 		}
 	}
 
@@ -105,18 +111,20 @@ public class JvnServerImpl
 	 * @throws JvnException
 	 **/
 	public Object jvnLookupObject(String jon) throws jvn.JvnException {
+		Object proxy = null;
+
 		try {
 			JvnObject jo = coord.jvnLookupObject(jon, this);
 
 			if (jo != null) {
-				Object proxy = JvnObjectImpl.newInstance(jo);
+				proxy = JvnObjectImpl.newInstance(jo);
 				objects.put(jo.jvnGetObjectId(), (JvnObject) Proxy.getInvocationHandler(proxy));
-                return proxy;
 			}
-			return null;
-		} catch (Exception e) {
-			throw new JvnException(e.toString());
+		} catch (RemoteException e) {
+			System.out.println("Connection to coord lost.");
+			System.exit(1);
 		}
+		return proxy;
 	}
 
 	/**
@@ -126,11 +134,15 @@ public class JvnServerImpl
 	 * @throws  JvnException
 	 **/
 	public Serializable jvnLockRead(int joi) throws JvnException {
+		Serializable o = null;
+
 		try {
-			return coord.jvnLockRead(joi, this);
-		} catch (Exception e) {
-			throw new JvnException(e.toString());
+			o = coord.jvnLockRead(joi, this);
+		} catch (RemoteException e) {
+			System.out.println("Connection to coord lost.");
+			System.exit(1);
 		}
+		return o;
 	}
 
 	/**
@@ -140,11 +152,15 @@ public class JvnServerImpl
 	 * @throws  JvnException
 	 **/
 	public Serializable jvnLockWrite(int joi) throws JvnException {
+		Serializable o = null;
+
 		try {
-			return coord.jvnLockWrite(joi, this);
-		} catch (Exception e) {
-			throw new JvnException(e.toString());
+			o = coord.jvnLockWrite(joi, this);
+		} catch (RemoteException e) {
+			System.out.println("Connection to coord lost.");
+			System.exit(1);
 		}
+		return o;
 	}
 
 
