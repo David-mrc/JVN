@@ -9,15 +9,12 @@
 
 package jvn;
 
+import java.io.*;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.HashMap;
-import java.io.Serializable;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
 
 public class JvnCoordImpl 	
         extends UnicastRemoteObject
@@ -25,13 +22,14 @@ public class JvnCoordImpl
 
     private static final long serialVersionUID = 1L;
 
-    private int objCount = 0;
+    private int objCount;
     private int serverCount = 0;
     private final HashMap<JvnRemoteServer, Integer> servers = new HashMap<>();
     private final HashMap<Integer, Serializable> objectId_object = new HashMap<>();
     private final HashMap<String, JvnObject> symbolicName_jo = new HashMap<>();
     private final HashMap<Integer, Set<JvnRemoteServer>> readers = new HashMap<>();
     private final HashMap<Integer, JvnRemoteServer> writers = new HashMap<>();
+    private final JvnCoordLog log;
 
     public static void main(String[] args) throws Exception {
         JvnRemoteCoord obj = new JvnCoordImpl();
@@ -39,12 +37,30 @@ public class JvnCoordImpl
         r.bind("Coord", obj);
 	}
 
-    /**
-     * Default constructor
-     * @throws JvnException
-     **/
 	private JvnCoordImpl() throws Exception {
-		System.out.println("Coordinator started.");
+        log = new JvnCoordLog();
+
+        try {
+            objCount = log.restoreObjects(objectId_object, readers);
+            log.restoreNames(symbolicName_jo);
+
+            System.out.println("Restored the following objects:");
+            for (int id : objectId_object.keySet()) {
+                System.out.println(id + ": " + objectId_object.get(id));
+            }
+            System.out.println("\nRestored the following JvnObjects:");
+            for (String name : symbolicName_jo.keySet()) {
+                System.out.println("\"" + name + "\": " + symbolicName_jo.get(name));
+            }
+        } catch (Exception e) {
+            objectId_object.clear();
+            readers.clear();
+            symbolicName_jo.clear();
+            objCount = 0;
+            log.deleteAllLogs();
+            System.err.println("Failed to restore previous session.");
+        }
+        System.out.println("\nCoordinator started.");
 	}
 
     /**
@@ -71,10 +87,15 @@ public class JvnCoordImpl
         addServer(js);
 
         int joi = jo.jvnGetObjectId();
-        objectId_object.put(joi, jo.jvnGetSharedObject());
-        symbolicName_jo.put(jon, jo);
-        writers.put(joi, js);
+        Serializable obj = jo.jvnGetSharedObject();
 
+        log.logObject(joi, obj);
+        objectId_object.put(joi, obj);
+
+        log.logName(jon, jo);
+        symbolicName_jo.put(jon, jo);
+
+        writers.put(joi, js);
         print(js, "Object " + joi + " registered with name: \"" + jon + "\"");
     }
 
@@ -143,6 +164,7 @@ public class JvnCoordImpl
         for (int joi : writers.keySet()) {
             if (writers.get(joi) == js) {
                 Serializable obj = js.jvnInvalidateWriter(joi);
+                log.logObject(joi, obj);
                 objectId_object.put(joi, obj);
                 writers.remove(joi);
             }
@@ -188,6 +210,7 @@ public class JvnCoordImpl
 
             try {
                 Serializable obj = writer.jvnInvalidateWriter(joi);
+                log.logObject(joi, obj);
                 objectId_object.put(joi, obj);
                 writers.remove(joi);
             } catch (RemoteException e) {
@@ -205,6 +228,7 @@ public class JvnCoordImpl
 
             try {
                 Serializable obj = writer.jvnInvalidateWriterForReader(joi);
+                log.logObject(joi, obj);
                 objectId_object.put(joi, obj);
                 writers.remove(joi);
                 readers.get(joi).add(writer);
