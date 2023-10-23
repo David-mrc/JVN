@@ -1,6 +1,7 @@
 # JVN - Javanaise Project
 
 The aim of the Javanaise project is to implement a distributed object cache in Java. Java applications using Javanaise can create and access locally hidden distributed objects.
+The project was made and compiled using Java 17.
 
 ## Installation
 
